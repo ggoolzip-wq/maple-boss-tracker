@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""메이플 보스 트래커 — 로컬 도우미 서버 (선택 사항)
+"""보스 캐릭터 관리 — 로컬 도우미 서버 (선택 사항)
 
 사용법:  python serve.py      (Windows: start-windows.bat 더블클릭, 창은 열어 두기만 하면 됩니다)
          python serve.py --open   → 브라우저로 http://localhost:8787 도 함께 엽니다
@@ -287,7 +287,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"메이플 보스 트래커 도우미 실행 중: http://localhost:{PORT}  (종료: Ctrl+C 또는 창 닫기)")
+    print(f"보스 캐릭터 관리 도우미 실행 중: http://localhost:{PORT}  (종료: Ctrl+C 또는 창 닫기)")
     print("  · 더블클릭으로 연 index.html 에서 [결정석 가격 갱신]을 누르면 됩니다. 이 창은 열어 두세요.")
     if "--open" in sys.argv:
         try: webbrowser.open(f"http://localhost:{PORT}/index.html")
