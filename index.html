@@ -315,6 +315,8 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
 .gdside .gdt{font-weight:800;margin-bottom:2px}
 .gdside .btn{margin-top:8px}
 @media (max-width:520px){.gdsides{grid-template-columns:1fr}}
+
+.gdhelp{font-size:.88rem;line-height:1.55}.gdhelp ul{padding-left:18px;margin:6px 0}.gdhelp li{margin:6px 0}
 </style>
 </head>
 <body>
@@ -433,7 +435,7 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
  *  구글 드라이브 동기화용 OAuth 클라이언트 ID (Google Cloud 콘솔 > Google 인증 플랫폼 > 클라이언트 에서 만든 '웹 애플리케이션' ID)
  *  예: '1234567890-abcdefg.apps.googleusercontent.com'  — 비워 두면 동기화 기능만 '준비 중'으로 표시되고 나머지는 그대로 동작합니다.
  * ===================================================================== */
-const GOOGLE_CLIENT_ID = '';
+const GOOGLE_CLIENT_ID = '463037848804-2ut2277bsc2cf4vpf4qb0rl7hlt9ur8c.apps.googleusercontent.com';
 /* =====================================================================
  *  설정 상수 (필요 시 이곳 또는 앱의 '설정' 탭에서 수정)
  * ===================================================================== */
@@ -1755,14 +1757,33 @@ function gdNorm(d){ const x=JSON.parse(JSON.stringify(d||{})); delete x.updatedA
   x.settings.accounts=(x.settings.accounts||[]).map(a=>({id:a.id,label:a.label})); delete x.settings.lastSync; delete x.settings.apiKey; delete x.settings.driveKeys; delete x.theme; return stable(x); }
 const gdLocalEmpty=()=>!S.characters.length && !(S.history||[]).length && !(S.monthHistory||[]).length;
 
-function gdFail(e){
+const GD_TEST_USER_HELP='구글 로그인 창에 <b>"액세스 차단됨: … Google 인증 절차를 완료하지 않았습니다"</b>(오류 403: access_denied)가 보였다면, 이 앱이 아직 <b>테스트 모드</b>라서 등록된 계정만 로그인할 수 있기 때문입니다. '
+  +'<a href="https://console.cloud.google.com/auth/audience" target="_blank" rel="noopener">Google Cloud 콘솔 &gt; Google 인증 플랫폼 &gt; 대상 &gt; 테스트 사용자</a>에서 <b>사용자 추가</b>로 지금 로그인한 구글 이메일을 넣고 저장한 뒤 다시 시도하세요.';
+const GD_UNVERIFIED_HELP='<b>"Google에서 확인하지 않은 앱"</b> 화면이 나오면 정상입니다 (개인용 앱이라 구글 심사를 받지 않았음). <b>계속</b>을 누른 뒤, 권한 화면에서 <b>Google Drive 앱 데이터(자체 구성 데이터) 권한</b>에 체크하고 계속하세요. 테스트 모드에서는 7일마다 한 번씩 다시 허용해야 할 수 있습니다.';
+function gdErrInfo(e){
+  const t=e?.type||'';
+  if(t==='popup_closed') return {short:'로그인 창이 닫혔습니다 — 다시 연결을 눌러 주세요',html:`<p><b>로그인을 끝내기 전에 구글 로그인 창이 닫혔습니다.</b> 다시 시도해 주세요.</p><ul><li>${GD_UNVERIFIED_HELP}</li><li>${GD_TEST_USER_HELP}</li></ul>`};
+  if(t==='access_denied') return {short:'구글 로그인이 거부되었습니다 (테스트 사용자 등록 확인)',html:`<p><b>구글이 로그인을 허용하지 않았습니다 (access_denied).</b></p><ul><li>${GD_TEST_USER_HELP}</li><li>권한 화면에서 <b>취소</b>를 눌렀다면 다시 시도해 <b>계속/허용</b>을 눌러 주세요.</li></ul>`};
+  if(t==='scope') return {short:'드라이브 권한에 체크하지 않았습니다',html:`<p><b>드라이브 권한이 허용되지 않았습니다.</b> 다시 로그인해서 권한 화면의 <b>Google Drive 앱 데이터(자체 구성 데이터)</b> 항목에 체크한 뒤 계속을 눌러 주세요. 이 권한으로는 이 앱이 만든 숨김 파일 하나만 다루며, 내 드라이브의 다른 파일은 볼 수 없습니다.</p>`};
+  if(t==='popup_failed_to_open') return {short:'로그인 팝업이 차단되었습니다 — 다시 연결을 눌러 주세요',html:`<p><b>브라우저가 구글 로그인 팝업을 막았습니다.</b> 상단의 <b>☁ 다시 연결</b>을 직접 눌러 주세요. 그래도 안 되면 주소창 오른쪽의 팝업 차단 아이콘에서 이 사이트의 팝업을 <b>항상 허용</b>으로 바꿔 주세요.</p>`};
+  if(/invalid_client|unauthorized_client|origin|redirect_uri/i.test(t+' '+(e?.message||''))) return {short:'구글 클라이언트 설정 오류',html:`<p><b>구글 OAuth 클라이언트 설정 문제입니다 (${esc(t||e.message)}).</b> Google 인증 플랫폼 &gt; 클라이언트의 <b>승인된 JavaScript 원본</b>에 <code>${esc(location.origin)}</code> 이 정확히(끝에 / 없이) 들어 있는지 확인하세요. 바꾼 뒤 반영까지 몇 분 걸릴 수 있습니다.</p>`};
+  return null;
+}
+function gdFail(e,interactive){
   console.warn('drive',e);
-  if(['popup_failed_to_open','popup_closed','access_denied','scope','immediate_failed','interaction_required'].includes(e.type))
-    gdSet('reconnect',(e.message||'')+' — 상단의 [☁ 다시 연결]을 한 번 눌러 주세요');
-  else gdSet('error',e.message||String(e));
+  const info=gdErrInfo(e);
+  if(info||['immediate_failed','interaction_required'].includes(e.type)){
+    gdSet('reconnect',info?info.short:(e.message||'')+' — 상단의 [☁ 다시 연결]을 한 번 눌러 주세요');
+    if(info&&interactive) gdHelpModal(info.html);
+  } else gdSet('error',e.message||String(e));
+}
+function gdHelpModal(html){
+  $('#gdTitle').textContent='☁️ 구글 로그인 안내';
+  $('#gdBody').innerHTML=`<div class="gdhelp">${html}</div><div class="row"><button class="btn plain" id="gdClose2" onclick="$('#driveModal').classList.remove('show')">닫기</button><button class="btn" id="gdLogin">다시 로그인</button></div>`;
+  $('#driveModal').classList.add('show');
 }
 async function gdConnect(interactive){
-  gdSet('connecting', interactive?'구글 로그인 창에서 계정을 선택하고 허용해 주세요':'드라이브 확인 중…');
+  gdSet('connecting', interactive?'구글 로그인 창에서 계정을 선택하고 허용해 주세요 ("확인하지 않은 앱" 화면이면 [계속])':'드라이브 확인 중…');
   let slow=null; if(!interactive && !gd.token) slow=setTimeout(()=>{ if(gd.state==='connecting') gdSet('reconnect','상단의 [☁ 다시 연결]을 한 번 눌러 주세요'); },15000);
   try{
     await gdToken(); clearTimeout(slow);
@@ -1780,7 +1801,7 @@ async function gdConnect(interactive){
     if(base && rU===base && lU!==base){ await gdWrite(); gdSet('on','이 PC의 변경 사항을 드라이브에 저장했습니다'); return; }
     if(base && lU===base && rU!==base) return gdApply(remote,'다른 PC에서 바뀐 데이터를 불러왔습니다');
     gdAsk(remote);
-  }catch(e){ clearTimeout(slow); gdFail(e); }
+  }catch(e){ clearTimeout(slow); gdFail(e,interactive); }
 }
 function gdApply(remote,msg){
   const d=remote.data; d.updatedAt=+remote.updatedAt||Date.now();
@@ -1794,6 +1815,7 @@ function gdAsk(remote){
   const card=(t,ic,u,chars,weeks,newer,id,btn)=>`<div class="gdside ${newer?'newer':''}"><div class="gdt">${ic} ${t} ${newer?'<span class="pill">최근 수정</span>':''}</div>
     <div>마지막 수정: <b>${u?hm(u):'알 수 없음'}</b></div><div>캐릭터 <b>${chars}</b>명 · 주간 기록 ${weeks}주</div>
     <button class="btn ${newer?'':'ghost'}" id="${id}">${btn}</button></div>`;
+  $('#gdTitle').textContent='☁️ 어느 데이터를 쓸까요?';
   $('#gdBody').innerHTML=`<p class="muted" style="margin-top:0">구글 드라이브와 이 PC의 데이터가 서로 다릅니다. 어느 쪽을 쓸지 한 번만 골라 주세요. 고르지 않은 쪽은 덮어써집니다.</p>
     <div class="gdsides">${card('구글 드라이브','☁️',rU,d.characters.length,(d.history||[]).length,rU>lU,'gdUseDrive','드라이브 데이터 불러오기')}
     ${card('이 PC','💻',lU,S.characters.length,(S.history||[]).length,lU>=rU,'gdUseLocal','이 PC 데이터로 덮어쓰기')}</div>
@@ -1831,7 +1853,7 @@ async function gdPush(opts={}){
   }catch(e){ gdFail(e); return false; }
   finally{ gd.busy=false; if(gd.again){ gd.again=false; gdChanged(); } }
 }
-function gdLogin(){ gd.client=gd.client||null; gdConnect(true); }
+function gdLogin(){ $('#driveModal').classList.remove('show'); gdConnect(true); }
 async function gdLogout(wipe){
   if(wipe && !confirm('드라이브에 저장한 뒤 로그아웃하고, 이 브라우저에 저장된 캐릭터·기록·API 키를 모두 지웁니다.\n(드라이브의 데이터는 그대로 남아서 다음에 로그인하면 다시 불러옵니다)\n계속할까요?')) return;
   if(gdMeta.on && gdLocalDirty()){
