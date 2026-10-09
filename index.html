@@ -305,6 +305,16 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
 .pmprice{white-space:nowrap;font-size:.85rem}
 .pmtags{display:flex;gap:4px;flex-wrap:wrap}
 .pmun{margin-top:8px;font-size:.8rem}
+
+.hbtn.gbtn{margin-right:6px;white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+.hbtn.gbtn.warn{background:#fff;color:var(--warn);border-color:#fff;font-weight:700}
+.gdline{margin-bottom:2px}
+.gdsides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.gdside{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:4px;background:var(--panel2)}
+.gdside.newer{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.gdside .gdt{font-weight:800;margin-bottom:2px}
+.gdside .btn{margin-top:8px}
+@media (max-width:520px){.gdsides{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -315,6 +325,7 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
       메이플 보스 트래커 <span style="font-weight:500;opacity:.85;font-size:.8rem">KMS</span>
     </div>
     <div class="hspace"></div>
+    <button class="hbtn gbtn" id="gBtn" hidden>☁ 구글 로그인</button>
     <button class="hbtn" id="themeBtn" title="테마 전환">🌙 다크</button>
   </div>
   <nav class="tabs" id="tabs">
@@ -394,6 +405,13 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
     <div class="muted" style="font-size:.75rem;margin-top:8px">✕ · Esc · 바깥을 누르면 아무것도 기록하지 않고 닫습니다.</div>
   </div>
 </div>
+<div class="modal-bg" id="driveModal">
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="gdTitle">
+    <button class="ringx" id="gdClose" aria-label="나중에">✕</button>
+    <h3 id="gdTitle">☁️ 어느 데이터를 쓸까요?</h3>
+    <div id="gdBody"></div>
+  </div>
+</div>
 <div class="modal-bg" id="priceModal">
   <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="pmTitle">
     <button class="ringx" id="pmClose" aria-label="닫기">✕</button>
@@ -411,6 +429,11 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
 
 <script>
 'use strict';
+/* =====================================================================
+ *  구글 드라이브 동기화용 OAuth 클라이언트 ID (Google Cloud 콘솔 > Google 인증 플랫폼 > 클라이언트 에서 만든 '웹 애플리케이션' ID)
+ *  예: '1234567890-abcdefg.apps.googleusercontent.com'  — 비워 두면 동기화 기능만 '준비 중'으로 표시되고 나머지는 그대로 동작합니다.
+ * ===================================================================== */
+const GOOGLE_CLIENT_ID = '';
 /* =====================================================================
  *  설정 상수 (필요 시 이곳 또는 앱의 '설정' 탭에서 수정)
  * ===================================================================== */
@@ -671,6 +694,8 @@ function load(){
   migrate();
   delete S.settings.worldLimit; // 월드 결정석 판매 한도 기능 제거 (수익 = 클리어한 보스 합계, 상한 없음)
   S.characters.forEach(normChar);
+  if(typeof S.updatedAt!=='number') S.updatedAt=0;
+  lastBody=bodyOf();
 }
 function migrate(){
   if((S.version||1)<2){
@@ -718,7 +743,15 @@ function migrate(){
   }
 }
 function normChar(c){ ['bosses','weekly','monthly','auto','sync','drops','mdrops','dropOut','mdropOut'].forEach(k=>c[k]=c[k]||{}); c.world=c.world||''; }
-function save(){ localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(S)); }
+// updatedAt: 데이터 내용이 실제로 바뀐 시각 (구글 드라이브 동기화에서 어느 쪽이 최신인지 비교)
+let lastBody=null;
+function bodyOf(){ const u=S.updatedAt; S.updatedAt=0; const b=JSON.stringify(S); S.updatedAt=u; return b; }
+function save(){
+  const b=bodyOf(), changed=b!==lastBody;
+  if(changed){ S.updatedAt=Date.now(); lastBody=b; }
+  localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(S));
+  if(changed) gdChanged();
+}
 const price = (b,diff) => { const k=priceKey(b,diff); return (k in S.settings.prices)?S.settings.prices[k]:(PRICE_CONFIG[k]||0); };
 const activeChar = () => S.characters.find(c=>c.id===S.activeId);
 const uid = () => Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
@@ -1379,6 +1412,7 @@ function renderSettings(){
       <div class="field"><label>캐릭터당 월간 보스 처치</label><input type="number" min="1" id="sMonthLim" value="${st.monthlyLimit}"></div>
     </div>
     <p class="muted">기본값: 캐릭터당 주간 보스 ${CONFIG.WEEKLY_BOSS_LIMIT}회 / 월간 ${CONFIG.MONTHLY_BOSS_LIMIT}회 (패치로 바뀔 수 있음)</p></div>
+  ${driveCard()}
   <div class="card"><h2>💾 백업 / 복원</h2>
     <div class="toolbar"><button class="btn" id="exportBtn">JSON 내보내기</button><button class="btn ghost" id="importBtn">JSON 가져오기</button><span style="flex:1"></span><button class="btn danger sm" id="resetAllBtn">전체 데이터 초기화</button></div>
     <p class="muted">가져오기 시 현재 데이터를 덮어씁니다(API 키는 유지). 정기적으로 백업해 두세요.</p></div>
@@ -1552,6 +1586,11 @@ async function updatePrices(){
   try{ res=await fetch(priceUrl()+'?posts=10',{signal:ctl.signal,cache:'no-store'}); }
   catch(e){
     clearTimeout(tm); if(btn){ btn.disabled=false; btn.textContent='🔄 결정석 가격 갱신'; }
+    if(location.protocol==='https:'){ priceModal(`<div class="impmsg warn"><b>가격 갱신은 집 PC에서 start-windows.bat를 실행한 상태에서 눌러주세요 (페이지는 그대로 두셔도 됩니다)</b>
+      <ul><li>온라인 주소에서도 내 PC의 도우미(<code>${esc(priceUrl())}</code>)를 불러 가격을 가져옵니다. 도우미가 없는 PC(PC방 등)에서는 가격 갱신만 쓸 수 없고, 나머지 기능은 그대로 됩니다.</li>
+      <li>도우미를 실행했는데도 안 되면: 브라우저가 <b>"이 기기의 다른 앱 및 서비스에 액세스"</b>(로컬 네트워크 액세스) 권한을 물을 때 <b>허용</b>을 눌러 주세요. 이미 차단했다면 주소창 왼쪽 아이콘 → 사이트 설정에서 바꿀 수 있습니다.</li>
+      <li>또는 내려받은 <code>index.html</code> 파일 버전에서 가격을 갱신하세요.</li></ul>
+      <div class="toolbar"><button class="btn sm" id="pmRetry">다시 시도</button></div></div>`); return; }
     priceModal(`<div class="impmsg warn"><b>가격 갱신은 start-windows.bat를 실행한 뒤 다시 눌러주세요 (페이지는 그대로 두셔도 됩니다)</b>
       <ul><li>이 폴더의 <code>start-windows.bat</code>(맥/리눅스: <code>python3 serve.py</code>)를 실행하고 검은 창을 열어 둔 채 다시 누르면 됩니다.</li>
       <li>가격표는 메이플스토리 공식 홈페이지 공지에서 가져오는데, 브라우저가 직접 읽을 수 없어 내 PC의 작은 도우미 프로그램이 대신 읽어 옵니다.</li>
@@ -1597,6 +1636,213 @@ function applyPriceUpdate(){
   let n=0; for(const x of priceUpd.rows){ if(!ks.has(x.k)) continue; if(x.new===PRICE_CONFIG[x.k]) delete S.settings.prices[x.k]; else S.settings.prices[x.k]=x.new; n++; }
   if(n) S.settings.priceSource={url:priceUpd.src?.url||'',title:priceUpd.src?.title||'',date:priceUpd.src?.date||'',at:Date.now()};
   save(); $('#priceModal').classList.remove('show'); render(); toast(n?`결정석 가격 ${n}개를 반영했습니다`:'반영할 항목을 선택하지 않았습니다');
+}
+
+/* =====================================================================
+ *  구글 드라이브 동기화 — Google Identity Services(토큰 모델) + Drive REST v3, 범위 drive.appdata
+ *  (내 드라이브의 숨겨진 '앱 데이터' 폴더에 maple-boss-tracker.json 하나만 저장. 다른 파일은 보거나 건드리지 않음)
+ * ===================================================================== */
+const GD={ SCOPE:'https://www.googleapis.com/auth/drive.appdata', FILE:'maple-boss-tracker.json',
+  META_KEY:'mapleBossTracker.gdrive', TOKEN_KEY:'mapleBossTracker.gtoken',
+  API:'https://www.googleapis.com/drive/v3', UP:'https://www.googleapis.com/upload/drive/v3',
+  ONLINE:'https://ggoolzip-wq.github.io/maple-boss-tracker/', DEBOUNCE:5000 };
+const gcid=()=>GOOGLE_CLIENT_ID||window.__MBT_GCID||'';
+const gdOriginOk=()=>location.protocol==='https:'||/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const gdUsable=()=>!!gcid()&&gdOriginOk();
+let gd={state:'off',msg:'',token:null,exp:0,fileId:null,timer:null,busy:false,again:false,client:null,onTok:null,onErr:null,pending:null};
+let gdMeta=(()=>{ try{ return JSON.parse(localStorage.getItem(GD.META_KEY))||{}; }catch(e){ return {}; } })(); // {on, base, fileId, lastSave, lastLoad}
+const gdSaveMeta=()=>localStorage.setItem(GD.META_KEY,JSON.stringify(gdMeta));
+try{ const t=JSON.parse(sessionStorage.getItem(GD.TOKEN_KEY)||'null'); if(t&&t.e>Date.now()+60e3){ gd.token=t.t; gd.exp=t.e; } }catch(e){}
+const gdLocalDirty=()=>gdMeta.on && (S.updatedAt||0)!==(gdMeta.base||0);
+const gdTime=t=>t?`${hm(t)}`:'없음';
+
+function gdSet(state,msg){ gd.state=state; gd.msg=msg||''; gdRender(); }
+function gdRender(){
+  const b=$('#gBtn'); if(b){
+    b.hidden=!gdUsable();
+    const L={off:'☁ 구글 로그인',connecting:'☁ 연결 중…',saving:'☁ 저장 중…',reconnect:'☁ 다시 연결',conflict:'☁ 선택 필요',error:'☁ 동기화 오류',
+      on: gd.timer||gdLocalDirty() ? '☁ 저장 대기' : (gdMeta.lastSave||gdMeta.lastLoad ? `☁ ${hm(Math.max(gdMeta.lastSave||0,gdMeta.lastLoad||0)).split(' ')[1]} 저장됨` : '☁ 동기화됨')};
+    b.textContent=L[gd.state]||'☁ 구글'; b.classList.toggle('warn',['reconnect','conflict','error'].includes(gd.state));
+    b.title=gd.msg||'구글 드라이브 동기화';
+  }
+  const st=$('#gdStatus'); if(st) st.innerHTML=gdStatusHtml();
+}
+function gdStatusHtml(){
+  const on=gdMeta.on&&gd.state!=='off';
+  const head={off:'로그인하지 않음',connecting:'연결 중…',saving:'저장 중…',on:gdLocalDirty()||gd.timer?'변경 사항 저장 대기 (약 5초 후 자동 저장)':'✓ 동기화됨',
+    reconnect:'다시 연결 필요',conflict:'어느 데이터를 쓸지 선택이 필요합니다',error:'오류'}[gd.state];
+  return `<div class="gdline"><b>${head}</b>${gd.msg?` <span class="muted">— ${esc(gd.msg)}</span>`:''}</div>
+    <div class="muted" style="font-size:.8rem">마지막 저장: ${gdTime(gdMeta.lastSave)} · 마지막 불러오기: ${gdTime(gdMeta.lastLoad)}</div>
+    <div class="toolbar" style="margin-top:8px">${on
+      ? `<button class="btn sm" id="gdSaveNow">지금 저장</button><button class="btn sm ghost" id="gdLogout">로그아웃</button>`
+      : `<button class="btn sm" id="gdLogin">구글 로그인</button>`}
+      ${gd.state==='conflict'?'<button class="btn sm" id="gBtn2" onclick="gdAsk(gd.pending)">선택하기</button>':''}
+      <span style="flex:1"></span><button class="btn sm danger" id="gdWipe">로그아웃 후 이 PC 데이터 지우기</button></div>`;
+}
+function driveCard(){
+  let inner;
+  if(!gcid()) inner=`<div class="impmsg warn"><b>구글 연결 준비 중</b><div>구글 드라이브 동기화는 곧 켜질 예정입니다. 그동안 다른 PC로 옮길 때는 아래 JSON 백업을 사용하세요. 나머지 기능은 모두 정상 동작합니다.</div></div>`;
+  else if(!gdOriginOk()) inner=`<div class="impmsg warn"><b>구글 동기화는 온라인 주소에서만 됩니다</b><div>파일(file://)로 연 페이지에서는 구글 로그인이 되지 않습니다. 온라인 주소 <a href="${GD.ONLINE}" target="_blank" rel="noopener">${GD.ONLINE}</a> 에서 사용하세요.
+    파일 버전의 데이터는 <b>JSON 내보내기</b> → 온라인 주소에서 <b>JSON 가져오기</b> 후 구글 로그인하면 드라이브에 올라갑니다.</div></div>`;
+  else inner=`<div id="gdStatus">${gdStatusHtml()}</div>
+    <label class="checkline" style="margin-top:10px"><input type="checkbox" id="sDriveKeys" ${S.settings.driveKeys?'checked':''}> 넥슨 API 키도 드라이브에 저장 (PC방에서 다시 입력 안 해도 됨)</label>
+    <p class="muted" style="font-size:.78rem;margin:4px 0 0">켜면 API 키가 내 구글 드라이브의 비공개 앱 전용 폴더(나만 접근, 이 앱만 읽기 가능)에 함께 저장됩니다. 끄면(기본) 키는 각 PC 브라우저에만 남습니다.</p>
+    <p class="muted" style="font-size:.78rem;margin:6px 0 0">PC방에서는 다 쓴 뒤 <b>로그아웃 후 이 PC 데이터 지우기</b>를 눌러 주세요 (먼저 드라이브에 저장한 뒤 이 브라우저의 기록·키를 지웁니다).</p>`;
+  return `<div class="card" id="driveCard"><h2>☁️ 구글 드라이브 동기화</h2>
+    <p class="muted" style="margin-top:0">집·PC방 어디서든 같은 데이터를 씁니다. 내 구글 드라이브의 <b>숨겨진 앱 전용 폴더</b>에 <code>${GD.FILE}</code> 하나만 저장하며, 드라이브의 다른 파일은 보거나 건드리지 않습니다. 변경 후 약 5초 뒤, 그리고 창을 닫거나 다른 탭으로 갈 때 자동 저장됩니다.</p>${inner}</div>`;
+}
+function gdHeaderClick(){
+  if(['off','reconnect','error'].includes(gd.state)) return gdLogin();
+  if(gd.state==='conflict') return gdAsk(gd.pending);
+  tab='settings'; syncTabs(); render(); $('#driveCard')?.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function gdLoadLib(){
+  return new Promise((res,rej)=>{
+    if(window.google?.accounts?.oauth2) return res();
+    let sc=document.getElementById('gsiScript');
+    if(!sc){ sc=document.createElement('script'); sc.id='gsiScript'; sc.src='https://accounts.google.com/gsi/client'; sc.async=true; document.head.appendChild(sc); }
+    sc.addEventListener('load',()=>res()); sc.addEventListener('error',()=>{ sc.remove(); rej(new Error('구글 로그인 스크립트를 불러오지 못했습니다 (인터넷 연결이나 광고 차단 확장 프로그램 확인)')); });
+  });
+}
+async function gdToken(){
+  if(gd.token && Date.now()<gd.exp-60e3) return gd.token;
+  await gdLoadLib();
+  if(!gd.client) gd.client=google.accounts.oauth2.initTokenClient({client_id:gcid(),scope:GD.SCOPE,
+    callback:r=>gd.onTok&&gd.onTok(r), error_callback:e=>gd.onErr&&gd.onErr(e)});
+  return new Promise((res,rej)=>{
+    gd.onTok=r=>{
+      if(r.error) return rej(Object.assign(new Error(r.error_description||r.error),{type:r.error}));
+      if(google.accounts.oauth2.hasGrantedAllScopes && !google.accounts.oauth2.hasGrantedAllScopes(r,GD.SCOPE))
+        return rej(Object.assign(new Error('드라이브 앱 데이터 권한에 체크해야 동기화할 수 있습니다'),{type:'scope'}));
+      gd.token=r.access_token; gd.exp=Date.now()+(+r.expires_in||3599)*1000;
+      sessionStorage.setItem(GD.TOKEN_KEY,JSON.stringify({t:gd.token,e:gd.exp})); res(gd.token);
+    };
+    gd.onErr=e=>rej(Object.assign(new Error({popup_failed_to_open:'로그인 팝업이 차단되었습니다',popup_closed:'로그인 창이 닫혔습니다'}[e?.type]||e?.message||'로그인 실패'),{type:e?.type||'unknown'}));
+    gd.client.requestAccessToken({prompt:''}); // 이미 동의했다면 창이 잠깐 떴다가 바로 닫힘
+  });
+}
+async function gdFetch(url,opt={},retry=true){
+  const tok=await gdToken();
+  const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:'Bearer '+tok}});
+  if(r.status===401&&retry){ gd.token=null; sessionStorage.removeItem(GD.TOKEN_KEY); return gdFetch(url,opt,false); }
+  if(!r.ok){ let m=''; try{ m=(await r.json()).error?.message||''; }catch(e){}
+    throw Object.assign(new Error(`드라이브 오류 (HTTP ${r.status})${m?' — '+m:''}`),{status:r.status}); }
+  return r;
+}
+async function gdFind(){
+  const q=encodeURIComponent(`name='${GD.FILE}' and trashed=false`);
+  const r=await gdFetch(`${GD.API}/files?spaces=appDataFolder&q=${q}&orderBy=modifiedTime%20desc&pageSize=10&fields=files(id,modifiedTime,appProperties)`);
+  return ((await r.json()).files||[])[0]||null;
+}
+async function gdRead(id){ return (await gdFetch(`${GD.API}/files/${id}?alt=media`)).json(); }
+function gdPayload(){ return {app:'maple-boss-tracker',format:1,savedAt:Date.now(),updatedAt:S.updatedAt||0,characters:S.characters.length,withKeys:!!S.settings.driveKeys,data:backupData(!!S.settings.driveKeys)}; }
+async function gdWrite(keepalive){
+  const body=JSON.stringify(gdPayload());
+  const meta={appProperties:{updatedAt:String(S.updatedAt||0),characters:String(S.characters.length)}};
+  if(!gd.fileId){ meta.name=GD.FILE; meta.parents=['appDataFolder']; meta.mimeType='application/json'; }
+  const bd='mbt'+Math.random().toString(36).slice(2);
+  const mp=`--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${body}\r\n--${bd}--`;
+  const opt={method:gd.fileId?'PATCH':'POST',headers:{'Content-Type':`multipart/related; boundary=${bd}`},body:mp,keepalive:!!keepalive&&mp.length<60000};
+  try{
+    const r=await gdFetch(gd.fileId?`${GD.UP}/files/${gd.fileId}?uploadType=multipart&fields=id`:`${GD.UP}/files?uploadType=multipart&fields=id`,opt);
+    gd.fileId=(await r.json()).id||gd.fileId;
+  }catch(e){ if(e.status===404&&gd.fileId){ gd.fileId=null; return gdWrite(keepalive); } throw e; }
+  gdMeta.fileId=gd.fileId; gdMeta.base=S.updatedAt||0; gdMeta.lastSave=Date.now(); gdSaveMeta();
+}
+// 비교용: 키·자동 동기화 시각 등 기기마다 다른 값은 빼고 비교
+const stable=v=>Array.isArray(v)?'['+v.map(stable).join(',')+']':v&&typeof v==='object'?'{'+Object.keys(v).sort().filter(k=>v[k]!==undefined).map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}':JSON.stringify(v);
+function gdNorm(d){ const x=JSON.parse(JSON.stringify(d||{})); delete x.updatedAt; delete x.period; x.settings=x.settings||{};
+  x.settings.accounts=(x.settings.accounts||[]).map(a=>({id:a.id,label:a.label})); delete x.settings.lastSync; delete x.settings.apiKey; delete x.settings.driveKeys; delete x.theme; return stable(x); }
+const gdLocalEmpty=()=>!S.characters.length && !(S.history||[]).length && !(S.monthHistory||[]).length;
+
+function gdFail(e){
+  console.warn('drive',e);
+  if(['popup_failed_to_open','popup_closed','access_denied','scope','immediate_failed','interaction_required'].includes(e.type))
+    gdSet('reconnect',(e.message||'')+' — 상단의 [☁ 다시 연결]을 한 번 눌러 주세요');
+  else gdSet('error',e.message||String(e));
+}
+async function gdConnect(interactive){
+  gdSet('connecting', interactive?'구글 로그인 창에서 계정을 선택하고 허용해 주세요':'드라이브 확인 중…');
+  let slow=null; if(!interactive && !gd.token) slow=setTimeout(()=>{ if(gd.state==='connecting') gdSet('reconnect','상단의 [☁ 다시 연결]을 한 번 눌러 주세요'); },15000);
+  try{
+    await gdToken(); clearTimeout(slow);
+    gdSet('connecting','드라이브 확인 중…');
+    gdMeta.on=true; gdSaveMeta();
+    const f=await gdFind(); gd.fileId=f?.id||null;
+    if(!f){ if(gdLocalEmpty()){ gdSet('on','드라이브에 아직 데이터가 없습니다. 캐릭터를 추가하면 자동 저장됩니다'); return; }
+      await gdWrite(); gdSet('on','이 PC 데이터를 드라이브에 처음 저장했습니다'); return; }
+    const remote=await gdRead(f.id);
+    if(!remote?.data || !Array.isArray(remote.data.characters)) throw new Error('드라이브 파일 형식이 올바르지 않습니다');
+    const rU=+remote.updatedAt||0, lU=S.updatedAt||0, base=gdMeta.base||0;
+    if(gdLocalEmpty()) return gdApply(remote,'드라이브 데이터를 불러왔습니다');
+    if((base && rU===base && lU===base) || gdNorm(remote.data)===gdNorm(backupData(false))){ gdMeta.base=lU; gdMeta.lastLoad=Date.now(); gdSaveMeta();
+      if(remote.withKeys!==!!S.settings.driveKeys || rU!==lU) await gdWrite(); gdSet('on'); return; }
+    if(base && rU===base && lU!==base){ await gdWrite(); gdSet('on','이 PC의 변경 사항을 드라이브에 저장했습니다'); return; }
+    if(base && lU===base && rU!==base) return gdApply(remote,'다른 PC에서 바뀐 데이터를 불러왔습니다');
+    gdAsk(remote);
+  }catch(e){ clearTimeout(slow); gdFail(e); }
+}
+function gdApply(remote,msg){
+  const d=remote.data; d.updatedAt=+remote.updatedAt||Date.now();
+  applyData(d); // load() 로 updatedAt 이 드라이브 값 그대로 유지됨
+  gdMeta.base=S.updatedAt; gdMeta.lastLoad=Date.now(); gdSaveMeta();
+  gdSet('on',msg); toast('☁ '+msg);
+}
+function gdAsk(remote){
+  if(!remote) return; gd.pending=remote; gdSet('conflict');
+  const rU=+remote.updatedAt||0, lU=S.updatedAt||0, d=remote.data;
+  const card=(t,ic,u,chars,weeks,newer,id,btn)=>`<div class="gdside ${newer?'newer':''}"><div class="gdt">${ic} ${t} ${newer?'<span class="pill">최근 수정</span>':''}</div>
+    <div>마지막 수정: <b>${u?hm(u):'알 수 없음'}</b></div><div>캐릭터 <b>${chars}</b>명 · 주간 기록 ${weeks}주</div>
+    <button class="btn ${newer?'':'ghost'}" id="${id}">${btn}</button></div>`;
+  $('#gdBody').innerHTML=`<p class="muted" style="margin-top:0">구글 드라이브와 이 PC의 데이터가 서로 다릅니다. 어느 쪽을 쓸지 한 번만 골라 주세요. 고르지 않은 쪽은 덮어써집니다.</p>
+    <div class="gdsides">${card('구글 드라이브','☁️',rU,d.characters.length,(d.history||[]).length,rU>lU,'gdUseDrive','드라이브 데이터 불러오기')}
+    ${card('이 PC','💻',lU,S.characters.length,(S.history||[]).length,lU>=rU,'gdUseLocal','이 PC 데이터로 덮어쓰기')}</div>
+    <p class="muted" style="font-size:.78rem">잘 모르겠다면 먼저 설정 탭의 <b>JSON 내보내기</b>로 이 PC 데이터를 백업해 두세요.</p>`;
+  $('#driveModal').classList.add('show');
+}
+async function gdResolve(which){
+  const remote=gd.pending; $('#driveModal').classList.remove('show'); if(!remote) return; gd.pending=null;
+  try{
+    if(which==='drive') gdApply(remote,'드라이브 데이터를 불러왔습니다');
+    else { gdSet('saving'); if(!gd.fileId) gd.fileId=(await gdFind())?.id||null; await gdWrite(); gdSet('on','이 PC 데이터로 드라이브를 덮어썼습니다'); toast('☁ 이 PC 데이터로 드라이브를 덮어썼습니다'); }
+  }catch(e){ gdFail(e); }
+}
+function gdChanged(){
+  if(!gdMeta.on||!gdUsable()||gd.state==='conflict') return;
+  clearTimeout(gd.timer); gd.timer=setTimeout(()=>{ gd.timer=null; gdPush(); },GD.DEBOUNCE); gdRender();
+}
+async function gdPush(opts={}){
+  clearTimeout(gd.timer); gd.timer=null;
+  if(!gdMeta.on||!gdUsable()||gd.state==='conflict') return false;
+  if(opts.quick && !(gd.token&&Date.now()<gd.exp-60e3)) return false; // 창을 닫는 중에는 로그인 창을 띄울 수 없음
+  if(gd.busy){ gd.again=true; return false; }
+  gd.busy=true; gdSet('saving');
+  try{
+    if(!opts.quick){
+      if(!gd.fileId) gd.fileId=(await gdFind())?.id||null;
+      else{ // 다른 PC에서 그 사이 저장했는지 확인 (덮어쓰기 방지)
+        try{ const m=await (await gdFetch(`${GD.API}/files/${gd.fileId}?fields=id,appProperties`)).json();
+          const rU=+(m.appProperties?.updatedAt||0);
+          if(gdMeta.base && rU && rU!==gdMeta.base && rU!==(S.updatedAt||0)){ gd.busy=false; gdAsk(await gdRead(gd.fileId)); return false; }
+        }catch(e){ if(e.status===404) gd.fileId=null; else throw e; }
+      }
+    }
+    await gdWrite(opts.quick); gdSet('on'); return true;
+  }catch(e){ gdFail(e); return false; }
+  finally{ gd.busy=false; if(gd.again){ gd.again=false; gdChanged(); } }
+}
+function gdLogin(){ gd.client=gd.client||null; gdConnect(true); }
+async function gdLogout(wipe){
+  if(wipe && !confirm('드라이브에 저장한 뒤 로그아웃하고, 이 브라우저에 저장된 캐릭터·기록·API 키를 모두 지웁니다.\n(드라이브의 데이터는 그대로 남아서 다음에 로그인하면 다시 불러옵니다)\n계속할까요?')) return;
+  if(gdMeta.on && gdLocalDirty()){
+    const ok=gd.token&&Date.now()<gd.exp-60e3 ? await gdPush() : false;
+    if(!ok && !confirm(wipe?'드라이브에 최신 내용을 저장하지 못했습니다. 그래도 이 PC 데이터를 지울까요? (마지막 저장 이후 변경 사항은 사라집니다)':'드라이브에 아직 저장하지 못한 변경 사항이 있습니다. 그래도 로그아웃할까요?')) return;
+  }
+  try{ if(gd.token&&window.google?.accounts?.oauth2?.revoke) google.accounts.oauth2.revoke(gd.token,()=>{}); }catch(e){}
+  clearTimeout(gd.timer); gd.timer=null; gd.token=null; gd.exp=0; gd.fileId=null; sessionStorage.removeItem(GD.TOKEN_KEY);
+  gdMeta={}; localStorage.removeItem(GD.META_KEY);
+  if(wipe){ localStorage.removeItem(CONFIG.STORAGE_KEY); toast('이 PC 데이터를 지웠습니다'); setTimeout(()=>location.reload(),600); return; }
+  gdSet('off'); render(); toast('구글 드라이브에서 로그아웃했습니다');
 }
 
 /* =====================================================================
@@ -1657,6 +1903,14 @@ document.addEventListener('click',e=>{
     case 'importBtn': $('#importFile').click(); break;
     case 'resetAllBtn': if(confirm('모든 캐릭터·기록·설정을 삭제합니다. 계속할까요? (먼저 백업을 권장합니다)')){ const acc=accounts().map(a=>({id:a.id,label:a.label,key:a.key})); S=defaultState(); S.settings.accounts=acc; save(); applyTheme(); render(); toast('초기화 완료 (API 키는 유지)'); } break;
     case 'priceUpdBtn': updatePrices(); break;
+    case 'gBtn': gdHeaderClick(); break;
+    case 'gdLogin': gdLogin(); break;
+    case 'gdLogout': gdLogout(false); break;
+    case 'gdWipe': gdLogout(true); break;
+    case 'gdSaveNow': gdPush(); break;
+    case 'gdUseDrive': gdResolve('drive'); break;
+    case 'gdUseLocal': gdResolve('local'); break;
+    case 'gdClose': $('#driveModal').classList.remove('show'); break;
     case 'pmRetry': updatePrices(); break;
     case 'pmApply': applyPriceUpdate(); break;
     case 'pmClose': case 'pmCancel': $('#priceModal').classList.remove('show'); break;
@@ -1678,6 +1932,7 @@ document.addEventListener('change',e=>{
   if(t.id==='sMode'){ S.settings.apiMode=t.value; save(); if(t.value==='proxy'&&location.protocol==='file:') toast('프록시 모드: serve.py 실행 후 http://localhost:8787 로 접속하세요'); }
   if(t.id==='sAuto'){ S.settings.autoSync=t.checked; save(); render(); }
   if(t.id==='sAutoEnable'){ S.settings.autoEnable=t.checked; save(); }
+  if(t.id==='sDriveKeys'){ S.settings.driveKeys=t.checked; save(); toast(t.checked?'다음 저장부터 API 키도 드라이브에 저장합니다':'다음 저장부터 드라이브에서 API 키를 뺍니다'); }
   if(t.id==='impWorld') renderImportList();
   if(t.id==='impAcc') openImport(t.value);
   if(t.dataset.acclabel){ const a=accById(t.dataset.acclabel); if(a){ a.label=t.value.trim()||a.label; save(); render(); } }
@@ -1698,9 +1953,21 @@ $('#charModal').addEventListener('click',e=>{ if(e.target.id==='charModal') clos
 document.addEventListener('keydown',e=>{ if(!$('#charModal').classList.contains('show')) return; if(e.key==='Escape') closeCharModal(); if(e.key==='Enter'&&e.target.id!=='fName') saveChar(); if(e.key==='Enter'&&e.target.id==='fName') (hasApi()?lookupByName():saveChar()); });
 $('#themeBtn').onclick=()=>{ const dark=document.documentElement.dataset.theme==='dark'; S.theme=dark?'light':'dark'; save(); applyTheme(); };
 
+// 백업/드라이브 저장 데이터. 기본은 API 키 제외(계정 이름만), withKeys=true 이면 키 포함 (드라이브 옵션)
+function backupData(withKeys){
+  const data=JSON.parse(JSON.stringify(S)); delete data.settings.apiKey;
+  data.settings.accounts=(data.settings.accounts||[]).map(a=>withKeys?{id:a.id,label:a.label,key:a.key||''}:{id:a.id,label:a.label});
+  return data;
+}
+// 백업/드라이브 데이터 적용: 데이터에 키가 없으면 이 브라우저의 키를 계정 id 기준으로 다시 연결하고, 없는 계정은 유지
+function applyData(d){
+  d.settings=d.settings||{}; const cur=accounts();
+  const acc=(Array.isArray(d.settings.accounts)?d.settings.accounts:[]).map(a=>({...a,key:a.key||cur.find(x=>x.id===a.id)?.key||''}));
+  cur.forEach(x=>{ if(!acc.some(a=>a.id===x.id)) acc.push(x); }); d.settings.accounts=acc;
+  localStorage.setItem(CONFIG.STORAGE_KEY,JSON.stringify(d)); load(); checkResets(); save(); applyTheme(); render();
+}
 function exportData(){
-  const data=JSON.parse(JSON.stringify(S)); delete data.settings.apiKey; // 키는 백업에서 제외 (계정 이름만 저장)
-  data.settings.accounts=(data.settings.accounts||[]).map(a=>({id:a.id,label:a.label}));
+  const data=backupData(false); // 키는 백업에서 제외 (계정 이름만 저장)
   const blob=new Blob([JSON.stringify({app:'maple-boss-tracker',exportedAt:new Date().toISOString(),data},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`maple-boss-backup-${dayId()}.json`; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000); toast('백업 파일을 내보냈습니다 (API 키 제외)');
@@ -1710,11 +1977,7 @@ $('#importFile').addEventListener('change',async e=>{
   try{ const j=JSON.parse(await f.text()); const d=j.data||j;
     if(!d||!Array.isArray(d.characters)) throw new Error('형식 오류');
     if(!confirm(`캐릭터 ${d.characters.length}명, 기록 ${(d.history||[]).length}주 데이터를 가져옵니다. 현재 데이터를 덮어쓸까요?`)) return;
-    // 백업에는 키가 없으므로 현재 브라우저의 계정 키를 id 기준으로 다시 연결하고, 백업에 없는 현재 계정은 유지
-    d.settings=d.settings||{}; const cur=accounts();
-    const acc=(Array.isArray(d.settings.accounts)?d.settings.accounts:[]).map(a=>({...a,key:a.key||cur.find(x=>x.id===a.id)?.key||''}));
-    cur.forEach(x=>{ if(!acc.some(a=>a.id===x.id)) acc.push(x); }); d.settings.accounts=acc;
-    localStorage.setItem(CONFIG.STORAGE_KEY,JSON.stringify(d)); load(); checkResets(); applyTheme(); render(); toast('가져오기 완료');
+    d.updatedAt=Date.now(); applyData(d); gdChanged(); toast('가져오기 완료');
   }catch(err){ alert('가져오기 실패: 올바른 백업 JSON 파일이 아닙니다.\n'+err.message); }
   finally{ e.target.value=''; }
 });
@@ -1730,7 +1993,10 @@ checkResets(); save(); applyTheme(); render();
 const autoDue=()=>hasApi() && S.settings.autoSync && S.characters.some(c=>c.ocid) && Date.now()-(S.settings.lastSync||0) > CONFIG.AUTO_SYNC_MIN*60e3;
 if(autoDue() || (hasApi() && S.characters.some(c=>c.ocid&&!c.accId))) syncAll({silent:true}); // 기존 데이터: 계정 자동 배정
 setInterval(()=>{ if(checkResets()) render(); else renderResetInfo(); if(!document.hidden && autoDue()) syncAll({silent:true}); }, 60e3);
-document.addEventListener('visibilitychange',()=>{ if(document.hidden) return; if(checkResets()) render(); if(autoDue()) syncAll({silent:true}); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden){ if(gd.timer||gdLocalDirty()) gdPush({quick:true}); return; } if(checkResets()) render(); if(autoDue()) syncAll({silent:true}); });
+window.addEventListener('pagehide',()=>{ if(gd.timer||gdLocalDirty()) gdPush({quick:true}); });
+gdRender();
+if(gdUsable()){ gdLoadLib().catch(()=>{}); if(gdMeta.on) gdConnect(false); }
 </script>
 </body>
 </html>
