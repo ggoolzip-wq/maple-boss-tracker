@@ -320,6 +320,18 @@ img.ric{width:16px;height:16px;object-fit:contain;image-rendering:pixelated}
 /* 파티 분배 획득 표시 */
 .iti .itn.pn{font-size:.68rem;color:var(--muted);font-weight:700;white-space:nowrap}
 .rline.pty .muted{color:var(--text);opacity:.85}
+/* 획득 아이템 줄 (모든 화면 공통) */
+.dls{display:inline-flex;flex-wrap:wrap;gap:3px 12px;vertical-align:middle;font-size:.74rem}
+.dl{display:inline-block;min-width:0;line-height:1.45}
+.dl .dlt{display:inline}
+.dl .dlt>img,.dl .dlt>.ifb{width:18px;height:18px;object-fit:contain;vertical-align:-4px;margin-right:3px;display:inline-block}
+.dl .routs{display:inline}
+.dl .dlb{margin-right:5px;vertical-align:1px}
+.dl .dln{color:var(--text)}
+.dl .dlc{color:var(--accent);font-weight:800}
+.dl .dlb{font-size:.66rem;font-weight:700;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:0 5px;white-space:nowrap}
+.rp-items .dls{display:flex;flex-direction:column;gap:3px}
+.hitems .dls{gap:3px 14px}
 </style>
 </head>
 <body>
@@ -597,26 +609,21 @@ function dropsHtml(b,diff,c){
   const ks=dropsFor(b,diff); if(!ks.length) return '';
   const tip=k=>{const it=ITEMS[k]; return `${it.n} — ${SET_LABEL[it.set]}${it.note?' · '+it.note:''} (${D[diff]})`;};
   const cnt=k=>c?dropCount(c,b,k):0;
-  const brk=k=>{ if(!c||!cnt(k)) return ''; const e=Object.entries(split(k).items); return e.some(([kk])=>kk.includes('#'))?'\n획득: '+e.map(([kk,n])=>{const p=parseIK(kk).party; return (p>1?`${p}인 분배`:'솔로')+' ×'+n;}).join(' · '):''; };
   const chip=k=>{const it=ITEMS[k], n=cnt(k);
-    return `<span class="drop s-${it.set} ${n?'got':''}" ${c?`data-drop="${b.id}|${k}" role="button" tabindex="0"`:''} title="${esc(tip(k)+brk(k))}${c?`\n클릭: 획득 +1 (현재 파티 ${curParty(c,b.id)}인${curParty(c,b.id)>1?' 분배':''}로 기록)${n?' · 우클릭/−: 가장 최근 1개 취소':''}`:''}">${itemIcon(k)}<span class="dn">${esc(it.s||it.n)}</span>${n?`<b class="dcnt">×${n}</b><span class="ddec" data-dropdec="${b.id}|${k}" role="button" aria-label="1개 취소" title="1개 취소">−</span>`:''}</span>`;};
+    return `<span class="drop s-${it.set} ${n?'got':''}" ${c?`data-drop="${b.id}|${k}" role="button" tabindex="0"`:''} title="${esc(tip(k))}${c?`\n클릭: 획득 +1${n?' · 우클릭/−: 가장 최근 1개 취소':''}`:''}">${itemIcon(k)}<span class="dn">${esc(it.s||it.n)}</span>${n?`<b class="dcnt">×${n}</b><span class="ddec" data-dropdec="${b.id}|${k}" role="button" aria-label="1개 취소" title="1개 취소">−</span>`:''}</span>`;};
   const open=c&&dropOpen.has(b.id);
   const shown=(!open&&ks.length>DROP_MAX)?ks.slice(0,DROP_MAX-1):ks, rest=ks.slice(shown.length);
   const restGot=rest.reduce((s,k)=>s+cnt(k),0);
-  // 아래 줄: 반지 상자 결과 + 파티 획득분 '(N인 분배)' (솔로 일반 아이템은 칩의 ×N 그대로)
-  const split=k=>{ const key=b.id+'|'+k; return splitDrops({[key]:cnt(k)},{[key]:outMap(c,b.type)[key]},{[key]:partyMap(c,b.type)[key]}); };
-  const ringLine=c?ks.filter(k=>cnt(k)).flatMap(k=>{ const sp=split(k);
-    return Object.entries(sp.items).filter(([kk])=>isRing(k)||kk.includes('#')).map(([kk,n])=>{ const p=parseIK(kk).party;
-      return `<span class="rline ${p>1?'pty':''}" title="${esc(ITEMS[k].n+partyTxt(p))} ×${n}">${itemIcon(k)}<span class="muted">${esc(p>1?ITEMS[k].n+partyTxt(p):ITEMS[k].s||ITEMS[k].n)}</span>${p>1||!isRing(k)?` <b>×${n}</b>`:''}${isRing(k)?' '+outHtml(sp.outcomes[kk],n):''}</span>`; }); }).join(''):'';
+  // 아래 줄: 이 보스에서 획득한 아이템 (모든 화면과 같은 형식: 이름(N인 분배) ×개수 결과)
+  const mine=c?(d=>({items:Object.fromEntries(Object.entries(d.items).filter(([k])=>k.split('|')[0]===b.id)),outcomes:d.outcomes}))(charDrops(c,b.type)):null;
+  const ringLine=mine?itemsInline(mine.items,{outs:mine.outcomes}):'';
   return `<div class="drops ${open?'open':''}" aria-label="주요 희귀 드롭">${shown.map(chip).join('')}${rest.length?`<span class="drop more ${restGot?'got':''}" ${c?`data-dropmore="${b.id}" role="button"`:''} title="${esc(rest.map(tip).join('\n'))}">${rest.map(k=>itemIcon(k)).join('')}<span class="dn">+${rest.length}</span>${restGot?`<b class="dcnt">×${restGot}</b>`:''}</span>`:''}${open&&ks.length>DROP_MAX?`<span class="drop more" data-dropmore="${b.id}" role="button" title="접기"><span class="dn">접기</span></span>`:''}</div>${ringLine?`<div class="ringouts">${ringLine}</div>`:''}`;
 }
 function changeDrop(key, delta){
   const c=activeChar(); if(!c) return; const [slot,item]=key.split('|'); const b=findBoss(slot); if(!b||!ITEMS[item]) return;
   if(delta>0 && isRing(item)){ openRing(key); return; } // 반지 상자는 결과를 고른 뒤 +1
-  const m=dropMap(c,b.type); const prev=+m[key]||0; const n=Math.max(0,prev+delta); if(n) m[key]=n; else delete m[key];
-  const pm=partyMap(c,b.type), pty=curParty(c,slot);
-  if(delta>0) (pm[key]=pm[key]||[]).push(pty); // 획득 당시 파티 인원 (나중에 인원을 바꿔도 유지)
-  else if(prev>n){ const l=pm[key]; if(l&&l.length) l.pop(); if(!n||(l&&!l.length)) delete pm[key]; }
+  const m=dropMap(c,b.type); const n=Math.max(0,(+m[key]||0)+delta); if(n) m[key]=n; else delete m[key];
+  const pty=curParty(c,slot);
   if(delta<0 && isRing(item)){ const om=outMap(c,b.type); const l=om[key]; if(l&&l.length) l.pop(); if(!n||(l&&!l.length)) delete om[key]; } // 가장 최근 획득(결과 포함) 취소
   save(); render(); toast(`${ITEMS[item].n}${delta>0?partyTxt(pty):''} ${delta>0?'획득':'취소'} — ${c.name} 이번 ${b.type==='monthly'?'달':'주'} ${n}개`);
 }
@@ -636,7 +643,7 @@ function chooseRing(o){
   const p=ringPending; if(!p||!(o in OUT_LABEL)) return; closeRing();
   const c=S.characters.find(x=>x.id===p.cid); if(!c) return; const [slot,item]=p.key.split('|'); const b=findBoss(slot);
   const m=dropMap(c,b.type); m[p.key]=(+m[p.key]||0)+1;
-  const pty=curParty(c,slot); const pm=partyMap(c,b.type); (pm[p.key]=pm[p.key]||[]).push(pty);
+  const pty=curParty(c,slot);
   const om=outMap(c,b.type); const l=om[p.key]||(om[p.key]=[]);
   // 기능 도입 전 획득분(결과 없음)은 '개수 − 결과 수' = 미기록으로 표시
   l.push(o); save(); render();
@@ -757,7 +764,7 @@ function migrate(){
     delete S.settings.apiKey;
   }
 }
-function normChar(c){ ['bosses','weekly','monthly','auto','sync','drops','mdrops','dropOut','mdropOut','dropParty','mdropParty'].forEach(k=>c[k]=c[k]||{}); c.world=c.world||''; }
+function normChar(c){ ['bosses','weekly','monthly','auto','sync','drops','mdrops','dropOut','mdropOut'].forEach(k=>c[k]=c[k]||{}); delete c.dropParty; delete c.mdropParty; c.world=c.world||''; }
 // updatedAt: 데이터 내용이 실제로 바뀐 시각 (구글 드라이브 동기화에서 어느 쪽이 최신인지 비교)
 let lastBody=null;
 function bodyOf(){ const u=S.updatedAt; S.updatedAt=0; const b=JSON.stringify(S); S.updatedAt=u; return b; }
@@ -779,13 +786,13 @@ function checkResets(){
     const sum=weekSummary(S.period.week);
     if(sum.cleared>0 && !S.history.some(h=>h.week===S.period.week)) S.history.push(sum);
     S.history.sort((a,b)=>a.week<b.week?-1:1);
-    S.characters.forEach(c=>{c.weekly={}; c.drops={}; c.dropOut={}; c.dropParty={}; for(const k in c.auto) if(findBoss(k)?.type==='weekly') delete c.auto[k];});
+    S.characters.forEach(c=>{c.weekly={}; c.drops={}; c.dropOut={}; for(const k in c.auto) if(findBoss(k)?.type==='weekly') delete c.auto[k];});
     msgs.push('주간 보스가 초기화되었습니다 (지난 주 기록 저장됨)'); changed=true;
   }
   if(S.period.month!==now.month){
     const ms=monthSummary(S.period.month); if(ms.cleared>0 && !S.monthHistory.some(h=>h.month===ms.month)) S.monthHistory.push(ms);
     S.monthHistory.sort((a,b)=>a.month<b.month?-1:1);
-    S.characters.forEach(c=>{c.monthly={}; c.mdrops={}; c.mdropOut={}; c.mdropParty={}; for(const k in c.auto) if(findBoss(k)?.type==='monthly') delete c.auto[k];}); msgs.push('월간 보스 초기화'); changed=true; }
+    S.characters.forEach(c=>{c.monthly={}; c.mdrops={}; c.mdropOut={}; for(const k in c.auto) if(findBoss(k)?.type==='monthly') delete c.auto[k];}); msgs.push('월간 보스 초기화'); changed=true; }
   if(S.period.day!==now.day) changed=true;
   if(changed){ S.period=now; save(); if(msgs.length) toast(msgs.join(' · ')); }
   return changed;
@@ -829,23 +836,19 @@ const isRing = k => RING_KEYS.has(k);
 const outMap = (c,type) => type==='monthly' ? (c.mdropOut||(c.mdropOut={})) : (c.dropOut||(c.dropOut={}));
 const cleanOut = m => Object.fromEntries(Object.entries(m||{}).filter(([,a])=>Array.isArray(a)&&a.length).map(([k,a])=>[k,a.filter(o=>o==='r4'||o==='c4'||o==='x')]));
 const OUT_LABEL = {r4:'리4', c4:'컨4', x:'꽝'};
-/* 획득 당시 파티 인원: c.dropParty / c.mdropParty = {'보스|아이템': [인원, ...]} (획득 순서). 개수보다 적으면 그만큼은 기능 도입 전 획득분 = 1인(솔로) */
-const partyMap = (c,type) => type==='monthly' ? (c.mdropParty||(c.mdropParty={})) : (c.dropParty||(c.dropParty={}));
+/* 파티 인원: 이번 주/이번 달의 획득 기록은 그 캐릭터의 해당 보스 '파티 인원' 설정을 따릅니다 (드롭다운을 바꾸면 이번 기간 기록 표시도 바뀜).
+ * 주간/월간 초기화로 기록에 저장될 때 키에 인원이 고정됩니다: 'boss|item'(1인) / 'boss|item#N'(N인 분배) */
 const curParty = (c,slot) => Math.max(1, Math.min(6, parseInt(c?.bosses?.[slot]?.party)||1));
 const partyTxt = p => p>1 ? ` (${p}인 분배)` : '';
-// 'boss|item', 'boss|item#3', 'item', 'item#2' → {it, party}
-function parseIK(k){ const [a,pp]=String(k).split('#'); return {it:a.includes('|')?a.split('|')[1]:a, party:Math.max(1,parseInt(pp)||1)}; }
-// 개수 + 결과 + 인원 배열 → 인원별로 나눈 {items:{'boss|item'(1인) / 'boss|item#N':n}, outcomes:{같은 키:[...]}}
-function splitDrops(items, outs, parties){
-  const I={}, O={};
-  for(const [k,n0] of Object.entries(items||{})){ const n=+n0||0; if(n<=0) continue;
-    const P=(parties||{})[k]||[], L=(outs||{})[k]||[];
-    for(let i=0;i<n;i++){ const pi=i-(n-P.length), oi=i-(n-L.length);
-      const p=pi>=0?Math.max(1,parseInt(P[pi])||1):1, key=p>1?`${k}#${p}`:k;
-      I[key]=(I[key]||0)+1; if(oi>=0&&L[oi]) (O[key]=O[key]||[]).push(L[oi]); } }
+// 'boss|item', 'boss|item#3', 'item', 'item#2' → {slot, it, party}
+function parseIK(k){ const [a,pp]=String(k).split('#'); const i=a.indexOf('|'); return {slot:i>=0?a.slice(0,i):'', it:i>=0?a.slice(i+1):a, party:Math.max(1,parseInt(pp)||1)}; }
+// 이번 기간 획득 기록 → 현재 파티 인원을 붙인 키
+function charDrops(c,type){
+  const m=type==='monthly'?c.mdrops:c.drops, om=type==='monthly'?c.mdropOut:c.dropOut, I={}, O={};
+  for(const [k,n] of Object.entries(m||{})){ if(!(+n>0)) continue; const slot=k.split('|')[0], p=curParty(c,slot), key=p>1?`${k}#${p}`:k;
+    I[key]=+n; const l=(om||{})[k]; if(Array.isArray(l)&&l.length) O[key]=l.filter(o=>o==='r4'||o==='c4'||o==='x'); }
   return {items:I, outcomes:O};
 }
-const charDrops = (c,type) => type==='monthly' ? splitDrops(c.mdrops,c.mdropOut,c.mdropParty) : splitDrops(c.drops,c.dropOut,c.dropParty);
 const charAllDrops = c => { const w=charDrops(c,'weekly'), m=charDrops(c,'monthly'); return {items:{...w.items,...m.items}, outcomes:{...w.outcomes,...m.outcomes}}; };
 const OUT_NAME = {r4:'리스트레인트 링 4레벨', c4:'컨티뉴어스 링 4레벨'};
 const miniIcon = k => ITEM_ICONS[k] ? `<img class="ric" src="${ITEM_ICONS[k]}" alt="" aria-hidden="true">` : '';
@@ -870,16 +873,21 @@ function monthSummary(mid){
   return {month:mid, total:a.monthTotal, cleared:a.per.reduce((s,p)=>s+p.r.mlist.length,0),
     perChar:a.per.filter(p=>p.r.mlist.length||itemSum(cleanItems(p.c.mdrops))).map(p=>({id:p.c.id, name:p.c.name, meso:p.r.monthMeso, bosses:p.r.mlist.map(bossTag), ...(sp=>({items:cleanItems(sp.items), outcomes:cleanOut(sp.outcomes)}))(charDrops(p.c,'monthly'))}))};
 }
-/* 아이템 개수 표시: {'보스|아이템':n} → 아이콘 ×n 칩 */
-// 아이템 + 파티 인원별로 따로 집계 (1인은 기존 표시 그대로, N인은 '(N인 분배)')
+/* 획득 아이템 줄 (모든 화면 공통 형식): [아이콘] 아이템 이름 (N인 분배) ×개수 · 반지 상자는 결과 집계(리4·컨4·꽝·미기록)
+ * byBoss: 보스별로 따로 (보스 이름 표시) / 기본: 아이템 + 인원별 합계 */
+function dropLine(it, party, n, outs, boss){
+  const I=ITEMS[it];
+  return `<span class="dl ${party>1?'pty':''}" title="${esc((boss?boss+' · ':'')+I.n+partyTxt(party))} ×${n}">${boss?`<span class="dlb">${esc(boss)}</span>`:''}<span class="dlt">${itemIcon(it)}<span class="dln">${esc(I.n+partyTxt(party))}</span> <b class="dlc">×${n}</b>${isRing(it)?' '+outHtml(outs,n,true):''}</span></span>`;
+}
 function itemsInline(items, opts={}){
-  const agg={}, outs={}, order=[];
-  for(const [k,n] of Object.entries(items||{})){ const {it,party}=parseIK(k); if(ITEMS[it]&&+n>0){ const a=party>1?it+'#'+party:it; if(!order.includes(it)) order.push(it);
-    agg[a]=(agg[a]||0)+(+n); if(isRing(it)) (outs[a]=outs[a]||[]).push(...((opts.outs||{})[k]||[])); } }
-  const ks=Object.keys(agg).sort((x,y)=>{ const X=parseIK(x), Y=parseIK(y); return order.indexOf(X.it)-order.indexOf(Y.it) || X.party-Y.party; });
+  const agg={}, outs={}, meta={};
+  for(const [k,n] of Object.entries(items||{})){ const {slot,it,party}=parseIK(k); if(!ITEMS[it]||!(+n>0)) continue;
+    const a=(opts.byBoss?slot+'|':'')+it+'#'+party; meta[a]={slot,it,party};
+    agg[a]=(agg[a]||0)+(+n); if(isRing(it)) (outs[a]=outs[a]||[]).push(...((opts.outs||{})[k]||[])); }
+  const bi=s=>{ const i=BOSSES.findIndex(b=>b.id===s); return i<0?999:i; }, ii=it=>Object.keys(ITEMS).indexOf(it);
+  const ks=Object.keys(agg).sort((x,y)=>{ const X=meta[x], Y=meta[y]; return (opts.byBoss?bi(X.slot)-bi(Y.slot):0) || ii(X.it)-ii(Y.it) || X.party-Y.party; });
   if(!ks.length) return opts.empty??'';
-  return `<span class="itl">${ks.map(a=>{ const {it,party}=parseIK(a), I=ITEMS[it];
-    return `<span class="iti ${party>1?'pty':''}" title="${esc(I.n+partyTxt(party))} ×${agg[a]}">${itemIcon(it)}${opts.names?`<span class="itn">${esc((I.s||I.n)+partyTxt(party))}</span>`:party>1?`<span class="itn pn">${esc((I.s||I.n)+partyTxt(party))}</span>`:''}<b>×${agg[a]}</b>${isRing(it)?outHtml(outs[a],agg[a],opts.compact):''}</span>`; }).join('')}</span>`;
+  return `<span class="dls">${ks.map(a=>{ const {slot,it,party}=meta[a]; return dropLine(it,party,agg[a],outs[a],opts.byBoss?(findBoss(slot)?.name||''):''); }).join('')}</span>`;
 }
 const fmtMonth = m => { const [y,mm]=String(m).split('-'); return `${y}년 ${+mm}월`; };
 
@@ -1284,7 +1292,7 @@ function revPanel(a,cur){
     <div class="rp-list">${per.map(p=>`<div class="rp-char ${p.c===cur?'on':''}" data-id="${p.c.id}" title="${esc(p.c.name)} 선택">
       <div class="rp-row"><span class="rp-nm">${esc(p.c.name)}${p.c.isMain?' <span class="mainbadge">★</span>':''}</span><b>${meso(p.r.meso)}</b></div>
       <div class="rp-row"><span class="mini"><i style="width:${(p.r.meso/max*100).toFixed(1)}%"></i></span><span class="muted" style="font-size:.72rem;white-space:nowrap">${p.r.weekly}/${lim}${monthlyCount(p.c)?' · 월간 ✓':''}</span></div>
-      ${(d=>itemsInline(d.items)?`<div class="rp-items">${itemsInline(d.items,{outs:d.outcomes})}</div>`:'')(charAllDrops(p.c))}</div>`).join('')}</div>
+      ${(d=>itemsInline(d.items)?`<div class="rp-items">${itemsInline(d.items,{outs:d.outcomes,byBoss:true})}</div>`:'')(charAllDrops(p.c))}</div>`).join('')}</div>
     ${(()=>{const n=S.characters.reduce((s,c)=>s+itemSum(c.drops),0); return `<div class="muted" style="font-size:.72rem;margin-top:6px">🎁 이번 주 획득 아이템 ${n}개 · 보스 행의 아이템을 누르면 +1</div>`;})()}
   </aside>`;
 }
@@ -1330,7 +1338,7 @@ function renderSummary(){
     ${orderedChars().map(c=>a.per.find(p=>p.c===c)).map(p=>`<tr><td><b>${esc(p.c.name)}</b>${p.c.isMain?'<span class="mainbadge">★</span>':''} <span class="muted">Lv.${esc(p.c.level||'?')}</span></td><td>${esc(worldOf(p.c))} · ${esc(p.c.job||'-')}</td><td class="num">${p.r.weekly}/${S.settings.weeklyLimit}</td><td class="num"><b>${meso(p.r.meso)}</b></td><td class="num muted">${p.r.monthMeso?meso(p.r.monthMeso):'-'}</td></tr>`).join('')}
     <tr><td colspan="3"><b>합계</b></td><td class="num"><b style="color:var(--accent)">${meso(a.total)}</b></td><td class="num">${a.monthTotal?meso(a.monthTotal):'-'}</td></tr></tbody></table></div>
   </div>
-  ${a.per.filter(p=>p.r.list.length).map(p=>`<div class="card"><details ${a.per.length<=3?'open':''}><summary>${esc(p.c.name)} — 결정석 상세 (${p.r.list.length})${(d=>itemsInline(d.items)?' · 획득 '+itemsInline(d.items,{outs:d.outcomes}):'')(charAllDrops(p.c))}</summary>
+  ${a.per.filter(p=>p.r.list.length).map(p=>`<div class="card"><details ${a.per.length<=3?'open':''}><summary>${esc(p.c.name)} — 결정석 상세 (${p.r.list.length})${(d=>itemsInline(d.items)?' · 획득 '+itemsInline(d.items,{outs:d.outcomes,byBoss:true}):'')(charAllDrops(p.c))}</summary>
     <table><thead><tr><th>보스</th><th>구분</th><th class="num">파티</th><th class="num">결정석 가격</th><th class="num">분배 후</th></tr></thead><tbody>
     ${p.r.list.map(x=>`<tr style="${x.counted?'':'opacity:.45;text-decoration:line-through'}"><td><span class="bname">${bossIcon(findBoss(x.slot))}${esc(x.name)} (${D[x.diff]})</span> ${x.auto?'<span class="pill api">API</span>':''}</td><td>${TYPE_LABEL[x.type]}</td><td class="num">${x.party}</td><td class="num">${meso(x.gross)}</td><td class="num">${meso(x.value)}</td></tr>`).join('')}
     </tbody></table></details></div>`).join('')}
@@ -1356,7 +1364,7 @@ function weekChart(rows, opts={}){
       <linearGradient id="gc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd2a6"/><stop offset="1" stop-color="#f6b37a"/></linearGradient></defs>
       <line x1="0" x2="${W}" y1="${Hh-pb}" y2="${Hh-pb}" stroke="currentColor" opacity=".15"/>${bars}${line}</svg></div>`;
 }
-const perCharItems = list => (list||[]).filter(p=>itemSum(p.items)).map(p=>`<div class="hitems"><b>${esc(p.name)}</b> ${itemsInline(p.items,{names:true,outs:p.outcomes})}</div>`).join('');
+const perCharItems = list => (list||[]).filter(p=>itemSum(p.items)).map(p=>`<div class="hitems"><b>${esc(p.name)}</b> ${itemsInline(p.items,{outs:p.outcomes,byBoss:true})}</div>`).join('');
 function renderHistory(){
   const v=$('#view'); const H=S.history.slice(-12);
   const cur=weekSummary(S.period.week);
@@ -1409,12 +1417,12 @@ function renderTotal(){
   </div>
   <div class="card"><h2>📈 주별 수익 · 누적 <span class="muted" style="font-weight:500">막대: 주간 결정석 수익 · 파란 선: 누적</span></h2>${weekChart(T.weeks,{cum:true,minBar:22})}</div>
   <div class="card"><h2>👤 캐릭터별 누적</h2><div style="overflow-x:auto"><table><thead><tr><th>캐릭터</th><th class="num">주간 보스</th><th class="num">월간 보스</th><th class="num">합계</th><th>획득 아이템</th></tr></thead><tbody>
-    ${T.chars.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td class="num">${meso(o.week)}</td><td class="num muted">${o.month?meso(o.month):'-'}</td><td class="num"><b>${meso(o.week+o.month)}</b></td><td>${itemsInline(o.items,{empty:'<span class="muted">-</span>',outs:Object.fromEntries(Object.entries(o.outs).map(([k,l])=>[k,l])),compact:true})}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">기록 없음</td></tr>'}
+    ${T.chars.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td class="num">${meso(o.week)}</td><td class="num muted">${o.month?meso(o.month):'-'}</td><td class="num"><b>${meso(o.week+o.month)}</b></td><td>${itemsInline(o.items,{empty:'<span class="muted">-</span>',outs:o.outs})}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">기록 없음</td></tr>'}
   </tbody></table></div></div>
   <div class="card"><h2>🎁 아이템별 누적 획득</h2>
     ${(()=>{const r=T.ring, rec=r.r4+r.c4+r.x; return rec+r.un?`<div class="ringsum">💍 반지 상자 결과: <span class="ro ro-r4">${outIcon('r4')}리4 <b>${r.r4}</b>개</span> · <span class="ro ro-c4">${outIcon('c4')}컨4 <b>${r.c4}</b>개</span> · <span class="ro ro-x">꽝 <b>${r.x}</b>회</span>${r.un?` · <span class="ro ro-un">미기록 ${r.un}회</span>`:''} · 대박 확률 <b>${rec?((r.r4+r.c4)/rec*100).toFixed(1)+'%':'-'}</b> <span class="muted">(결과를 기록한 ${rec}회 기준)</span></div>`:'';})()}
     ${T.items.length?`<div style="overflow-x:auto"><table><thead><tr><th>아이템</th><th class="num">개수</th><th>캐릭터별</th></tr></thead><tbody>
-    ${T.items.map(([a,I])=>{ const {it:k,party}=parseIK(a); return `<tr><td><span class="bname"><span class="drop s-${ITEMS[k].set}" style="pointer-events:none">${itemIcon(k)}<span class="dn">${esc(ITEMS[k].n+partyTxt(party))}</span></span></span></td><td class="num"><b>${I.n}</b>${isRing(k)?`<div>${outHtml(I.outs,I.n,true)}</div>`:''}</td><td class="muted">${Object.entries(I.by).map(([n,c])=>`${esc(n)} ×${c}`).join(' · ')}</td></tr>`; }).join('')}
+    ${T.items.map(([a,I])=>{ const {it:k,party}=parseIK(a); return `<tr><td><span class="dls">${dropLine(k,party,I.n,I.outs)}</span></td><td class="num"><b>${I.n}</b></td><td class="muted">${Object.entries(I.by).map(([n,c])=>`${esc(n)} ×${c}`).join(' · ')}</td></tr>`; }).join('')}
   </tbody></table></div>`:'<p class="muted">아직 획득한 아이템이 없습니다. 보스 체크 탭에서 보스 행의 아이템 칩을 누르면 개수가 기록됩니다.</p>'}</div>
   <div class="card"><h2>🗓 전체 주 목록</h2><div style="overflow-x:auto"><table><thead><tr><th>주차</th><th class="num">클리어</th><th class="num">아이템</th><th class="num">주간 수익</th><th class="num">누적</th></tr></thead><tbody>
     ${T.weeks.map(w=>{cum+=w.total||0;return {w,cum};}).reverse().map(({w,cum})=>`<tr><td>${fmtWeek(w.week)}${w.cur?' <span class="pill">이번 주</span>':''}</td><td class="num">${w.cleared??'-'}</td><td class="num">${w.items??itemSum(Object.assign({},...(w.perChar||[]).map(p=>p.items||{})))}</td><td class="num"><b>${meso(w.total||0)}</b></td><td class="num muted">${meso(cum)}</td></tr>`).join('')}
